@@ -1,6 +1,7 @@
 extern crate ggez;
 extern crate serde;
 extern crate serde_json;
+extern crate rand;
 
 #[macro_use]
 extern crate serde_derive;
@@ -12,14 +13,18 @@ use ggez::graphics::{self, DrawMode, DrawParam};
 
 use std::fs::File;
 use std::io::Read;
-use std::thread;
+use rand::Rng;
+use std::cell::RefCell;
 
 mod world;
 use self::world::*;
 
-impl EventHandler for World {
+impl<'a> EventHandler for World<'a> {
     fn update(&mut self, context: &mut Context) -> GameResult<()> {
-        self.push_robot(&Vector2::new(0.0, 0.0), 1.0);
+        match self.tick(){
+            Ok(_) => (),
+            Err(_) => self.robot.borrow_mut().position = Vector2::new(0.0, 0.0)
+        }
         Ok(())
     }
 
@@ -31,11 +36,7 @@ impl EventHandler for World {
             round.draw(context, Point2::new(0.0, 0.0), 0.0)?;
         }
         graphics::set_color(context, (255, 0, 0).into())?;
-        self.robot.draw(context, Point2::new(0.0, 0.0), 0.0)?;
-        if self.bad_position(){
-            self.robot.speed = -self.robot.speed;
-        }
-
+        self.robot.borrow().draw(context, Point2::new(0.0, 0.0), 0.0)?;
         graphics::present(context);
         Ok(())
     }
@@ -62,6 +63,7 @@ impl Drawable for Robot {
     fn draw_ex(&self, context: &mut Context, _param: DrawParam) -> GameResult<()> {
         let center = to_screen_coordinates(context, &self.position);
         let radius = to_screen_distanse(context, 0.01);
+        graphics::polygon(context, DrawMode::Fill, &[center, center])?;
         graphics::circle(context, DrawMode::Fill, center, radius, 0.1)?;
         Ok(())
     }
@@ -85,6 +87,25 @@ fn to_screen_distanse(context: &Context, distance: f32) -> f32 {
     distance * context.conf.window_mode.width as f32 / 2.0
 }
 
+struct DrunkPilot{
+    generator: RefCell<rand::prelude::ThreadRng>
+}
+
+impl DrunkPilot {
+    fn new() -> DrunkPilot {
+        DrunkPilot{generator: RefCell::new(rand::thread_rng())}
+    }
+}
+
+impl Pilot for DrunkPilot {
+    fn throttle(&self, world: &World) -> Vector2 {
+        let mut generator = self.generator.borrow_mut();
+        let x = generator.gen_range(-0.01, 0.01);
+        let y = generator.gen_range(-0.01, 0.01);
+        Vector2::new(x,y)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 struct Circle {
     x: f32,
@@ -105,8 +126,8 @@ fn main() {
         .window_setup(conf::WindowSetup::default().title("robot"))
         .window_mode(conf::WindowMode::default().dimensions(1000, 1000));
     let context = &mut cb.build().unwrap();
-    let mut state = World::new(rounds);
-    state.push_robot(&Vector2::new(0.01, 0.01), 1.0);
+    let pilot = DrunkPilot::new();
+    let mut state = World::new(rounds, &pilot, 0.001, 1.0);
     if let Err(e) = event::run(context, &mut state) {
         println!("Error encountered running game: {}", e);
     } else {

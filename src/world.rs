@@ -1,8 +1,13 @@
 use ggez::graphics::Vector2;
+use std::cell::RefCell;
 
 pub struct Robot {
     pub position: Vector2,
     pub speed: Vector2
+}
+
+pub trait Pilot{
+    fn throttle(&self, world: &World) -> Vector2;
 }
 
 impl Robot {
@@ -23,42 +28,59 @@ impl Round {
     }
 }
 
-pub struct World {
+pub struct World<'a> {
     pub rounds: Vec<Round>,
-    pub robot: Robot
+    pub robot: RefCell<Robot>,
+    pub pilot : &'a dyn Pilot,
+    pub max_force: f32,
+    pub time: f32,
 }
 
-impl World {
-    pub fn new(rounds: Vec<Round>) -> World {
+pub enum Collision<'a>{
+    Crash(&'a Round),
+    Lost
+}
+
+impl<'a> World<'a> where {
+    pub fn new(rounds: Vec<Round>, pilot: &'a dyn Pilot, max_force: f32, time: f32) -> World<'a> {
         World{
             rounds: rounds,
-            robot: Robot{
-                position: Vector2::new(-1.0,-1.0),
+            robot: RefCell::new(Robot{
+                position: Vector2::new(-0.9,-0.9),
                 speed: Vector2::new(0.0, 0.0)
-            }
+            }),
+            pilot: pilot,
+            max_force: max_force,
+            time: time
         }
     }
 
-    pub fn push_robot(&mut self, force: &Vector2, time: f32){
-        self.robot.push(force, time);
-    }
-
-    pub fn check_collisions(&self) -> bool {
+    fn check_collisions(&self) -> Option<&Round> {
+        let position = self.robot.borrow().position;
         for round in self.rounds.iter() {
-            let r = round.center - self.robot.position;
+            let r = round.center - position;
             if r.x * r.x + r.y * r.y <= round.radius * round.radius {
-                return false;
+                return Some(&round);
             }
         }
-        return true;
+        return None;
     }
 
     pub fn check_borders(&self) -> bool {
-        let (x, y) = (self.robot.position.x, self.robot.position.y);
+        let position = self.robot.borrow().position;
+        let (x, y) = (position.x, position.y);
         x >= -1.0 && x <= 1.0 && y >= -1.0 && y <= 1.0
     }
 
-    pub fn bad_position(&self) -> bool {
-        !self.check_borders() || !self.check_collisions()
+    pub fn tick(&mut self) -> Result<(), Collision> {
+        if !self.check_borders() {
+            return Err(Collision::Lost);
+        }
+        if let Some(round) = self.check_collisions() {
+            return Err(Collision::Crash(round));
+        }
+        let force = self.pilot.throttle(self);
+        self.robot.borrow_mut().push(&force, self.time);
+        return Ok(());
     }
 }
