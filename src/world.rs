@@ -52,4 +52,13 @@ impl World {
         }
         return true;
     }
+
+    pub fn check_borders(&self) -> bool {
+        let (x, y) = (self.robot.position.x, self.robot.position.y);
+        x >= -1.0 && x <= 1.0 && y >= -1.0 && y <= 1.0
+    }
+
+    pub fn bad_position(&self) -> bool {
+        !self.check_borders() || !self.check_collisions()
+    }
 }
