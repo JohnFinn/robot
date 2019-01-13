@@ -95,13 +95,19 @@ struct Circle {
     r: f32,
 }
 
+impl std::convert::From<&Circle> for Round {
+    fn from(circle: &Circle) -> Round {
+        Round::new(circle.x, circle.y, circle.r)
+    }
+}
+
 fn main() {
     let mut file = File::open("inputs.json").unwrap();
     let mut rounds : String = String::new();
     file.read_to_string(&mut rounds).unwrap();
     let rounds : Vec<Circle> = serde_json::from_str(&rounds).unwrap();
     let rounds: Vec<Round> = rounds.iter()
-        .map(|circle| Round::new(circle.x, circle.y, circle.r))
+        .map(Round::from)
         .collect();
 
     let mut cb = ContextBuilder::new("robot", "jouny")
