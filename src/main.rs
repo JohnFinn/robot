@@ -1,15 +1,24 @@
 extern crate ggez;
+extern crate serde;
+extern crate serde_json;
+
+#[macro_use]
+extern crate serde_derive;
 
 use ggez::{Context, ContextBuilder, conf, event, GameResult};
 use ggez::graphics::{Point2,Vector2, Drawable};
 use ggez::event::EventHandler;
 use ggez::graphics::{self, DrawMode, DrawParam};
 
+use std::fs::File;
+use std::io::Read;
+
 mod world;
 use self::world::*;
 
 impl EventHandler for World {
     fn update(&mut self, context: &mut Context) -> GameResult<()> {
+        self.push_robot(&Vector2::new(0.001, 0.001), 1.0);
         Ok(())
     }
 
@@ -71,16 +80,26 @@ fn to_screen_distanse(context: &Context, distance: f32) -> f32 {
     distance * context.conf.window_mode.width as f32
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+struct Circle {
+    x: f32,
+    y: f32,
+    r: f32,
+}
+
 fn main() {
+    let mut file = File::open("inputs.json").unwrap();
+    let mut rounds : String = String::new();
+    file.read_to_string(&mut rounds).unwrap();
+    let rounds : Vec<Circle> = serde_json::from_str(&rounds).unwrap();
+    let rounds: Vec<Round> = rounds.iter()
+        .map(|circle| Round::new(circle.x, circle.y, circle.r))
+        .collect();
+
     let mut cb = ContextBuilder::new("robot", "jouny")
         .window_setup(conf::WindowSetup::default().title("robot"))
         .window_mode(conf::WindowMode::default().dimensions(1000, 1000));
     let context = &mut cb.build().unwrap();
-    let rounds = vec![
-        Round::new(1.0, 1.0, 0.1),
-        Round::new(-1.0, 0.0, 0.05),
-        Round::new(1.0, -1.0, 0.025),
-    ];
     let mut state = World::new(rounds);
     if let Err(e) = event::run(context, &mut state) {
         println!("Error encountered running game: {}", e);
