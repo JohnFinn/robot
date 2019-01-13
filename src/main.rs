@@ -7,17 +7,18 @@ extern crate rand;
 extern crate serde_derive;
 
 use ggez::{Context, ContextBuilder, conf, event, GameResult};
-use ggez::graphics::{Point2,Vector2, Drawable};
+use ggez::graphics::{Point2, Vector2, Drawable};
 use ggez::event::EventHandler;
 use ggez::graphics::{self, DrawMode, DrawParam};
 
 use std::fs::File;
 use std::io::Read;
-use rand::Rng;
-use std::cell::RefCell;
 
 mod world;
 use self::world::*;
+
+mod pilots;
+use self::pilots::*;
 
 impl<'a> EventHandler for World<'a> {
     fn update(&mut self, context: &mut Context) -> GameResult<()> {
@@ -85,25 +86,6 @@ fn to_screen_coordinates(context: &Context, point: &Vector2) -> Point2 {
 
 fn to_screen_distanse(context: &Context, distance: f32) -> f32 {
     distance * context.conf.window_mode.width as f32 / 2.0
-}
-
-struct DrunkPilot{
-    generator: RefCell<rand::prelude::ThreadRng>
-}
-
-impl DrunkPilot {
-    fn new() -> DrunkPilot {
-        DrunkPilot{generator: RefCell::new(rand::thread_rng())}
-    }
-}
-
-impl Pilot for DrunkPilot {
-    fn throttle(&self, world: &World) -> Vector2 {
-        let mut generator = self.generator.borrow_mut();
-        let x = generator.gen_range(-0.01, 0.01);
-        let y = generator.gen_range(-0.01, 0.01);
-        Vector2::new(x,y)
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
