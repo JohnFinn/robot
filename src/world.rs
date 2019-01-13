@@ -33,7 +33,7 @@ impl World {
         World{
             rounds: rounds,
             robot: Robot{
-                position:Vector2::new(-1.0,-1.0),
+                position: Vector2::new(-1.0,-1.0),
                 speed: Vector2::new(0.0, 0.0)
             }
         }

@@ -1,9 +1,9 @@
 extern crate ggez;
 
-use ggez::{Context, ContextBuilder, GameError, conf, event, GameResult};
-use ggez::graphics::{Point2,Vector2};
+use ggez::{Context, ContextBuilder, conf, event, GameResult};
+use ggez::graphics::{Point2,Vector2, Drawable};
 use ggez::event::EventHandler;
-use ggez::graphics::{self,Mesh,DrawMode};
+use ggez::graphics::{self, DrawMode, DrawParam};
 
 mod world;
 use self::world::*;
@@ -18,15 +18,48 @@ impl EventHandler for World {
         graphics::set_background_color(context, (255, 255, 255, 0).into());
         graphics::set_color(context, graphics::BLACK)?;
         for round in self.rounds.iter() {
-            let center = to_screen_coordinates(context, &round.center);
-            let radius = to_screen_distanse(context, round.radius);
-            graphics::circle(context, DrawMode::Fill, center, radius, 0.1)?;
+            round.draw(context, Point2::new(0.0, 0.0), 0.0)?;
         }
+        graphics::set_color(context, (255, 0, 0).into())?;
+        self.robot.draw(context, Point2::new(0.0, 0.0), 0.0)?;
         graphics::present(context);
         Ok(())
     }
 }
 
+impl Drawable for Round {
+    fn draw_ex(&self, context: &mut Context, _param: DrawParam) -> GameResult<()> {
+        let center = to_screen_coordinates(context, &self.center);
+        let radius = to_screen_distanse(context, self.radius);
+        graphics::circle(context, DrawMode::Fill, center, radius, 0.1)?;
+        Ok(())
+    }
+
+    fn set_blend_mode(&mut self, _mode: Option<graphics::BlendMode>){
+
+    }
+
+    fn get_blend_mode(&self) -> Option<graphics::BlendMode> {
+        None
+    }
+}
+
+impl Drawable for Robot {
+    fn draw_ex(&self, context: &mut Context, _param: DrawParam) -> GameResult<()> {
+        let center = to_screen_coordinates(context, &self.position);
+        let radius = to_screen_distanse(context, 0.01);
+        graphics::circle(context, DrawMode::Fill, center, radius, 0.1)?;
+        Ok(())
+    }
+
+    fn set_blend_mode(&mut self, _mode: Option<graphics::BlendMode>){
+
+    }
+
+    fn get_blend_mode(&self) -> Option<graphics::BlendMode> {
+        None
+    }
+}
 
 fn to_screen_coordinates(context: &Context, point: &Vector2) -> Point2 {
     let x = (1.0 + point.x) * context.conf.window_mode.width as f32 / 2.0;
