@@ -11,6 +11,8 @@ use ggez::graphics::{Point2, Vector2, Drawable};
 use ggez::event::EventHandler;
 use ggez::graphics::{self, DrawMode, DrawParam};
 
+use rand::Rng;
+
 use std::fs::File;
 use std::io::Read;
 
@@ -24,7 +26,11 @@ impl<'a> EventHandler for World<'a> {
     fn update(&mut self, context: &mut Context) -> GameResult<()> {
         match self.tick(){
             Ok(_) => (),
-            Err(_) => self.robot.borrow_mut().position = Vector2::new(0.0, 0.0)
+            Err(_) => {
+                let mut robot = self.robot.borrow_mut();
+                robot.position = Vector2::new(-1.0, -1.0);
+                robot.speed = Vector2::new(0.0, 0.0);
+            }
         }
         Ok(())
     }
@@ -101,7 +107,17 @@ impl std::convert::From<&Circle> for Round {
     }
 }
 
+fn random_rounds(amt: usize) -> Vec<Round> {
+    let mut gen = rand::thread_rng();
+    (0..amt).map(|_| Round::new(
+        gen.gen_range(-1.0, 1.0),
+        gen.gen_range(-1.0, 1.0),
+        gen.gen_range(0.01, 0.3)
+    )).collect()
+}
+
 fn main() {
+    /*
     let mut file = File::open("inputs.json").unwrap();
     let mut rounds : String = String::new();
     file.read_to_string(&mut rounds).unwrap();
@@ -109,13 +125,23 @@ fn main() {
     let rounds: Vec<Round> = rounds.iter()
         .map(Round::from)
         .collect();
+    */
+    let x = Vector2::new(1.0, 1.0);
+    let y = Vector2::new(1.0, 0.0);
+    println!("{}", ggez::nalgebra::dot(&x, &y));
+    println!("{}", ggez::nalgebra::dot(&y, &x));
+    let rounds = vec![
+        Round::new(0.8, 0.7, 0.01)
+    ];
 
     let mut cb = ContextBuilder::new("robot", "jouny")
         .window_setup(conf::WindowSetup::default().title("robot"))
         .window_mode(conf::WindowMode::default().dimensions(1000, 1000));
     let context = &mut cb.build().unwrap();
-    let pilot = DrunkPilot::new();
+
+    let pilot = Pilot1::new();
     let mut state = World::new(rounds, &pilot, 0.001, 1.0);
+
     if let Err(e) = event::run(context, &mut state) {
         println!("Error encountered running game: {}", e);
     } else {

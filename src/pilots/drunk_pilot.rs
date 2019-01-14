@@ -20,8 +20,8 @@ impl DrunkPilot {
 impl Pilot for DrunkPilot {
     fn throttle(&self, world: &World) -> Vector2 {
         let mut generator = self.generator.borrow_mut();
-        let x = generator.gen_range(-0.01, 0.01);
-        let y = generator.gen_range(-0.01, 0.01);
+        let x = generator.gen_range(-0.001, 0.001);
+        let y = generator.gen_range(-0.001, 0.001);
         Vector2::new(x,y)
     }
 }
