@@ -1,17 +1,20 @@
-use ggez::graphics::Vector2;
+extern crate nalgebra;
+
 use std::cell::RefCell;
 
+type Vector2 = nalgebra::Vector2<f32>;
+
 pub struct Robot {
-    pub position: Vector2,
-    pub speed: Vector2
+    pub position: nalgebra::Vector2<f32>,
+    pub speed: nalgebra::Vector2<f32>
 }
 
 pub trait Pilot{
-    fn throttle(&self, world: &World) -> Vector2;
+    fn throttle(&self, world: &World) -> nalgebra::Vector2<f32>;
 }
 
 impl Robot {
-    pub fn push(&mut self, force: &Vector2, time: f32){
+    pub fn push(&mut self, force: &nalgebra::Vector2<f32>, time: f32){
         self.position += self.speed * time;
         self.speed += force * time;
     }

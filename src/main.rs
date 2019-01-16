@@ -2,12 +2,15 @@ extern crate ggez;
 extern crate serde;
 extern crate serde_json;
 extern crate rand;
+extern crate nalgebra;
+
+type Vector2 = nalgebra::Vector2<f32>;
 
 #[macro_use]
 extern crate serde_derive;
 
 use ggez::{Context, ContextBuilder, conf, event, GameResult};
-use ggez::graphics::{Point2, Vector2, Drawable};
+use ggez::graphics::{Point2, Drawable};
 use ggez::event::EventHandler;
 use ggez::graphics::{self, DrawMode, DrawParam};
 
@@ -21,6 +24,11 @@ use self::world::*;
 
 mod pilots;
 use self::pilots::*;
+
+mod neural_network;
+use self::neural_network::*;
+
+mod geometry_helper;
 
 impl<'a> EventHandler for World<'a> {
     fn update(&mut self, context: &mut Context) -> GameResult<()> {
@@ -125,13 +133,26 @@ fn main() {
     let rounds: Vec<Round> = rounds.iter()
         .map(Round::from)
         .collect();
+    
+    let dm = DMatrix::from_row_slice(4, 4, &[
+        1.0, 1.0, 1.0, 0.0,
+        2.0, 2.0, 2.0, 0.0,
+        3.0, 3.0, 3.0, 0.0,
+        4.0, 4.0, 4.0, 0.0,
+    ]);
+    let input = nalgebra::DVector::from_row_slice(4, &[1.0, 2.0, 3.0, 4.0]);
+    let res = &dm * &input;
+    println!("{}", res);
     */
-    let x = Vector2::new(1.0, 1.0);
-    let y = Vector2::new(1.0, 0.0);
-    println!("{}", ggez::nalgebra::dot(&x, &y));
-    println!("{}", ggez::nalgebra::dot(&y, &x));
+
+    let n = Net1::new();
+    let (direction, f) = n.get(&DVector::from_row_slice(7, &[0.1, 0.2, 0.001, 0.0, 0.5, 0.5, 0.1]));
+    println!("{} {}", direction, f);
+
+
     let rounds = vec![
-        Round::new(0.8, 0.7, 0.01)
+        Round::new(0.8, 0.7, 0.01),
+        // Round::new(0.3, 0.3, 0.01)
     ];
 
     let mut cb = ContextBuilder::new("robot", "jouny")
@@ -139,7 +160,7 @@ fn main() {
         .window_mode(conf::WindowMode::default().dimensions(1000, 1000));
     let context = &mut cb.build().unwrap();
 
-    let pilot = Pilot1::new();
+    let pilot = Pilot1::new(&n);
     let mut state = World::new(rounds, &pilot, 0.001, 1.0);
 
     if let Err(e) = event::run(context, &mut state) {

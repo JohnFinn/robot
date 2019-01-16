@@ -1,9 +1,10 @@
 extern crate rand;
-extern crate ggez;
+extern crate nalgebra;
+
+type Vector2 = nalgebra::Vector2<f32>;
 
 use std::cell::RefCell;
 use rand::Rng;
-use ggez::graphics::Vector2;
 
 use crate::world::*;
 
@@ -18,7 +19,7 @@ impl DrunkPilot {
 }
 
 impl Pilot for DrunkPilot {
-    fn throttle(&self, world: &World) -> Vector2 {
+    fn throttle(&self, world: &World) -> nalgebra::Vector2<f32> {
         let mut generator = self.generator.borrow_mut();
         let x = generator.gen_range(-0.001, 0.001);
         let y = generator.gen_range(-0.001, 0.001);
