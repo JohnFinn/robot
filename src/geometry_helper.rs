@@ -35,7 +35,6 @@ impl Rotatable for nalgebra::Vector2<f32> {
         let cos = angle.cos();
         let x = self.x * cos - self.y * sin;
         let y = self.x * sin + self.y * cos;
-        println!("angle {} sin {} cos {} xy{} {} self{} {}", angle, sin, cos, x, y, self.x, self.y);
         self.x = x;
         self.y = y;
     }
