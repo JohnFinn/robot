@@ -124,7 +124,12 @@ fn random_rounds(amt: usize) -> Vec<Round> {
     )).collect()
 }
 
+use crate::geometry_helper::Rotatable;
+
 fn main() {
+    let mut v = Vector2::new(3_f32.sqrt()/2.0, 0.5);
+    v.rotate_left(std::f64::consts::PI as f32 / 6.0);
+    println!("{}", v);
     /*
     let mut file = File::open("inputs.json").unwrap();
     let mut rounds : String = String::new();

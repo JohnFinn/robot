@@ -1,8 +1,6 @@
 extern crate num_traits;
 extern crate nalgebra;
 
-use num_traits::pow::Pow;
-
 use crate::world::*;
 use crate::geometry_helper::*;
 use crate::neural_network::Net1;
@@ -21,8 +19,6 @@ impl<'a> Pilot1<'a> {
     }
 }
 
-
-
 fn reward(speed_to_center: f32, distance: f32) -> f32 {
     speed_to_center / distance * 0.0001
 }
@@ -34,9 +30,11 @@ fn force_around(robot: &Robot, round: &Round) -> Vector2 {
     if robot.speed.dot(&to_center) <= 0.0 {
         return Vector2::new(0.0, 0.0);
     }
-    let mut to_way_around = rotate90left(&to_center);
+    let mut to_way_around = to_center.clone();
+    to_way_around.rotate90left();
+
     if robot.speed.dot(&to_way_around) < 0.0 {
-        to_way_around = rotate180(&to_way_around);
+        to_way_around.rotate180();
     }
     to_way_around
 }
@@ -65,9 +63,11 @@ impl<'a> Pilot for Pilot1<'a> {
 
             r.center.x, r.center.y, r.radius
         ]));
+
         let angle = 2.0 * std::f64::consts::PI as f32 * direction;
-        
         let component = (force.sqrt()/2.0).sqrt();
-        rotate(&Vector2::new(component, component), angle)
+        let mut force = Vector2::new(component, component);
+        force.rotate_left(angle);
+        force
     }
 }
