@@ -3,174 +3,86 @@ extern crate serde;
 extern crate serde_json;
 extern crate rand;
 extern crate nalgebra;
+extern crate nn;
+
+use rand::Rng;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 type Vector2 = nalgebra::Vector2<f32>;
 
-#[macro_use]
-extern crate serde_derive;
+use ggez::{ContextBuilder, conf, event};
 
-use ggez::{Context, ContextBuilder, conf, event, GameResult};
-use ggez::graphics::{Point2, Drawable};
-use ggez::event::EventHandler;
-use ggez::graphics::{self, DrawMode, DrawParam};
-
-use rand::Rng;
-
-use std::fs::File;
-use std::io::Read;
-
+mod world_draw;
 mod world;
-use self::world::*;
-
 mod pilots;
-use self::pilots::*;
-
 mod neural_network;
-use self::neural_network::*;
-
 mod geometry_helper;
+mod rl;
 
-impl<'a> EventHandler for World<'a> {
-    fn update(&mut self, context: &mut Context) -> GameResult<()> {
-        match self.tick(){
-            Ok(_) => (),
-            Err(_) => {
-                let mut robot = self.robot.borrow_mut();
-                robot.position = Vector2::new(-1.0, -1.0);
-                robot.speed = Vector2::new(0.0, 0.0);
+use self::rl::*;
+use self::world::*;
+use self::pilots::*;
+use self::geometry_helper::*;
+use self::world_draw::*;
+
+use nn::{NN, HaltCondition};
+
+fn generate_training_data(world: &mut World, pilot: &Pilot1, renderer: &WorldRenderer){
+    let mut gen = rand::thread_rng();
+    for i in 0..100 {
+        let lastlen = pilot.training_data.borrow().len();
+        let mut counter = 0;
+        loop {
+            let reward = world.step();
+            renderer.move_robot(&world);
+            match world.at() {
+                Ok(result) => match result {
+                    Position::Flight => {
+                        counter += 1;
+                        if counter > 10 {
+                            break;
+                        }
+                    },
+                    Position::Finish => {
+                        break;
+                    },
+                },
+                Err(_) => {
+                    // for i in pilot
+                    break;
+                }
+            }
+            let mut robot = world.robot.borrow_mut();
+            robot.position *= 0.0;
+            robot.speed *= 0.0;
+
+            for (input, result) in pilot.training_data.borrow_mut().iter_mut().skip(lastlen) {
+                result[0] = gen.gen_range(0.0, 1.0);
+                result[1] = 0.0;
             }
         }
-        Ok(())
-    }
-
-    fn draw(&mut self, context: &mut Context) -> GameResult<()> {
-        graphics::clear(context);
-        graphics::set_background_color(context, (255, 255, 255, 0).into());
-        graphics::set_color(context, graphics::BLACK)?;
-        for round in self.rounds.iter() {
-            round.draw(context, Point2::new(0.0, 0.0), 0.0)?;
-        }
-        graphics::set_color(context, (255, 0, 0).into())?;
-        self.robot.borrow().draw(context, Point2::new(0.0, 0.0), 0.0)?;
-        graphics::present(context);
-        Ok(())
     }
 }
-
-impl Drawable for Round {
-    fn draw_ex(&self, context: &mut Context, _param: DrawParam) -> GameResult<()> {
-        let center = to_screen_coordinates(context, &self.center);
-        let radius = to_screen_distanse(context, self.radius);
-        graphics::circle(context, DrawMode::Fill, center, radius, 0.1)?;
-        Ok(())
-    }
-
-    fn set_blend_mode(&mut self, _mode: Option<graphics::BlendMode>){
-
-    }
-
-    fn get_blend_mode(&self) -> Option<graphics::BlendMode> {
-        None
-    }
-}
-
-impl Drawable for Robot {
-    fn draw_ex(&self, context: &mut Context, _param: DrawParam) -> GameResult<()> {
-        let center = to_screen_coordinates(context, &self.position);
-        let radius = to_screen_distanse(context, 0.01);
-        graphics::polygon(context, DrawMode::Fill, &[center, center])?;
-        graphics::circle(context, DrawMode::Fill, center, radius, 0.1)?;
-        Ok(())
-    }
-
-    fn set_blend_mode(&mut self, _mode: Option<graphics::BlendMode>){
-
-    }
-
-    fn get_blend_mode(&self) -> Option<graphics::BlendMode> {
-        None
-    }
-}
-
-fn to_screen_coordinates(context: &Context, point: &Vector2) -> Point2 {
-    let x = (1.0 + point.x) * context.conf.window_mode.width as f32 / 2.0;
-    let y = (1.0 - point.y) * context.conf.window_mode.height as f32 / 2.0;
-    Point2::new(x, y)
-}
-
-fn to_screen_distanse(context: &Context, distance: f32) -> f32 {
-    distance * context.conf.window_mode.width as f32 / 2.0
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Circle {
-    x: f32,
-    y: f32,
-    r: f32,
-}
-
-impl std::convert::From<&Circle> for Round {
-    fn from(circle: &Circle) -> Round {
-        Round::new(circle.x, circle.y, circle.r)
-    }
-}
-
-fn random_rounds(amt: usize) -> Vec<Round> {
-    let mut gen = rand::thread_rng();
-    (0..amt).map(|_| Round::new(
-        gen.gen_range(-1.0, 1.0),
-        gen.gen_range(-1.0, 1.0),
-        gen.gen_range(0.01, 0.3)
-    )).collect()
-}
-
-use crate::geometry_helper::Rotatable;
 
 fn main() {
-    let mut v = Vector2::new(3_f32.sqrt()/2.0, 0.5);
-    v.rotate_left(std::f64::consts::PI as f32 / 6.0);
-    println!("{}", v);
-    /*
-    let mut file = File::open("inputs.json").unwrap();
-    let mut rounds : String = String::new();
-    file.read_to_string(&mut rounds).unwrap();
-    let rounds : Vec<Circle> = serde_json::from_str(&rounds).unwrap();
-    let rounds: Vec<Round> = rounds.iter()
-        .map(Round::from)
-        .collect();
-    
-    let dm = DMatrix::from_row_slice(4, 4, &[
-        1.0, 1.0, 1.0, 0.0,
-        2.0, 2.0, 2.0, 0.0,
-        3.0, 3.0, 3.0, 0.0,
-        4.0, 4.0, 4.0, 0.0,
-    ]);
-    let input = nalgebra::DVector::from_row_slice(4, &[1.0, 2.0, 3.0, 4.0]);
-    let res = &dm * &input;
-    println!("{}", res);
-    */
-
-    let n = Net1::new();
-    let (direction, f) = n.get(&DVector::from_row_slice(7, &[0.1, 0.2, 0.001, 0.0, 0.5, 0.5, 0.1]));
-    println!("{} {}", direction, f);
-
-
+    let net = Rc::new(RefCell::new(NN::new(&[7, 4, 2])));
     let rounds = vec![
-        Round::new(0.8, 0.7, 0.01),
-        // Round::new(0.3, 0.3, 0.01)
+        Round::new(0.8, 0.7, 0.01)
     ];
-
-    let mut cb = ContextBuilder::new("robot", "jouny")
-        .window_setup(conf::WindowSetup::default().title("robot"))
-        .window_mode(conf::WindowMode::default().dimensions(1000, 1000));
-    let context = &mut cb.build().unwrap();
-
-    let pilot = Pilot1::new(&n);
-    let mut state = World::new(rounds, &pilot, 0.001, 1.0);
-
-    if let Err(e) = event::run(context, &mut state) {
-        println!("Error encountered running game: {}", e);
-    } else {
-        println!("Game exited cleanly.");
+    let mut pilot = Rc::new(Pilot1::new(net.clone()));
+    let p2 = Rc::new(DrunkPilot::new());
+    let mut world = World::new(rounds, p2.clone(), 0.001, 1.0);
+    let renderer = WorldRenderer::new();
+    renderer.init_with(&world);
+    generate_training_data(&mut world, &pilot, &renderer);
+    {
+        let examples = pilot.training_data.borrow();
+        net.borrow_mut().train(&examples[..])
+            .halt_condition( HaltCondition::Epochs(10000) )
+            .log_interval( Some(1000) )
+            .momentum( 0.1 )
+            .rate( 0.3 )
+            .go();
     }
 }

@@ -1,6 +1,9 @@
 extern crate nalgebra;
 
 use std::cell::RefCell;
+use std::rc::Rc;
+
+use crate::geometry_helper::*;
 
 type Vector2 = nalgebra::Vector2<f32>;
 
@@ -20,6 +23,7 @@ impl Robot {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct Round{
     pub center: Vector2,
     pub radius: f32,
@@ -31,10 +35,10 @@ impl Round {
     }
 }
 
-pub struct World<'a> {
+pub struct World {
     pub rounds: Vec<Round>,
     pub robot: RefCell<Robot>,
-    pub pilot : &'a dyn Pilot,
+    pub pilot : Rc<Pilot>,
     pub max_force: f32,
     pub time: f32,
 }
@@ -44,8 +48,12 @@ pub enum Collision<'a>{
     Lost
 }
 
-impl<'a> World<'a> where {
-    pub fn new(rounds: Vec<Round>, pilot: &'a dyn Pilot, max_force: f32, time: f32) -> World<'a> {
+pub enum Position{
+    Finish, Flight
+}
+
+impl World {
+    pub fn new(rounds: Vec<Round>, pilot: Rc<dyn Pilot>, max_force: f32, time: f32) -> World {
         World{
             rounds: rounds,
             robot: RefCell::new(Robot{
@@ -75,15 +83,24 @@ impl<'a> World<'a> where {
         x >= -1.0 && x <= 1.0 && y >= -1.0 && y <= 1.0
     }
 
-    pub fn tick(&mut self) -> Result<(), Collision> {
+    pub fn at(&self) -> Result<Position, Collision> {
         if !self.check_borders() {
             return Err(Collision::Lost);
         }
         if let Some(round) = self.check_collisions() {
             return Err(Collision::Crash(round));
         }
+        let robot = self.robot.borrow();
+        if robot.position.distance_to(&Vector2::new(1.0, 1.0)) < 0.2 && robot.speed.length() < 0.001 {
+            return Ok(Position::Finish);
+        }
+        Ok(Position::Flight)
+    }
+
+    pub fn tick(&mut self) -> Result<Position, Collision> {
+        let position = self.at()?;
         let force = self.pilot.throttle(self);
         self.robot.borrow_mut().push(&force, self.time);
-        return Ok(());
+        return Ok(position);
     }
 }

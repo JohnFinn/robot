@@ -1,20 +1,24 @@
 extern crate num_traits;
 extern crate nalgebra;
+extern crate nn;
+
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::world::*;
 use crate::geometry_helper::*;
-use crate::neural_network::Net1;
 
 type Vector2 = nalgebra::Vector2<f32>;
 
-pub struct Pilot1<'a>{
-    pub net: &'a Net1
+pub struct Pilot1{
+    pub net: Rc<RefCell<nn::NN>>,
+    pub training_data: Rc<RefCell<Vec<(Vec<f64>, Vec<f64>)>>>
 }
 
-impl<'a> Pilot1<'a> {
-    pub fn new(net: &'a Net1) -> Pilot1<'a> {
+impl Pilot1 {
+    pub fn new(net: Rc<RefCell<nn::NN>>) -> Pilot1 {
         Pilot1{
-            net: net
+            net: net, training_data: Rc::new(RefCell::new(Vec::new()))
         }
     }
 }
@@ -39,33 +43,22 @@ fn force_around(robot: &Robot, round: &Round) -> Vector2 {
     to_way_around
 }
 
-impl<'a> Pilot for Pilot1<'a> {
+impl Pilot for Pilot1 {
     fn throttle(&self, world: &World) -> Vector2 {
         let robot = world.robot.borrow();
-        /*
-        let mut rewards = (Vector2::new(1.0, 1.0) - robot.position) * 0.0001;
-        for round in world.rounds.iter() {
-            let to_way_around = force_around(&robot, &round);
-            if length(&to_way_around) == 0.0 {
-                continue;
-            }
-            let to_center = round.center - robot.position;
-            let speed_to_center = nalgebra::dot(&robot.speed, &to_center);
-            let k = reward(speed_to_center, length(&to_center) - round.radius);
-            rewards += nalgebra::normalize(&to_way_around) * k;
-        }
-        rewards
-        */
-        let r = &world.rounds[0];
-        let (direction, force) = self.net.get(&nalgebra::DVector::from_row_slice(7, &[
-            robot.position.x, robot.position.y,
-            robot.speed.x, robot.speed.y,
 
-            r.center.x, r.center.y, r.radius
-        ]));
+        let r = &world.rounds[0];
+        let input = vec![
+            robot.position.x as f64, robot.position.y as f64,
+            robot.speed.x as f64, robot.speed.y as f64,
+            r.center.x as f64, r.center.y as f64, r.radius as f64
+        ];
+        let result = self.net.borrow_mut().run(&input);
+        let (direction, force) = (result[0] as f32, result[1] as f32);
+        self.training_data.borrow_mut().push((input, result));
 
         let angle = 2.0 * std::f64::consts::PI as f32 * direction;
-        let component = (force.sqrt()/2.0).sqrt();
+        let component = ((0.001 * force).sqrt()/2.0).sqrt();
         let mut force = Vector2::new(component, component);
         force.rotate_left(angle);
         force
