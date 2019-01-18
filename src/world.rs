@@ -97,10 +97,8 @@ impl World {
         Ok(Position::Flight)
     }
 
-    pub fn tick(&mut self) -> Result<Position, Collision> {
-        let position = self.at()?;
+    pub fn tick(&mut self) {
         let force = self.pilot.throttle(self);
         self.robot.borrow_mut().push(&force, self.time);
-        return Ok(position);
     }
 }

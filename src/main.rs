@@ -9,80 +9,98 @@ use rand::Rng;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-type Vector2 = nalgebra::Vector2<f32>;
-
-use ggez::{ContextBuilder, conf, event};
-
 mod world_draw;
 mod world;
 mod pilots;
-mod neural_network;
 mod geometry_helper;
 mod rl;
 
 use self::rl::*;
 use self::world::*;
 use self::pilots::*;
-use self::geometry_helper::*;
 use self::world_draw::*;
 
 use nn::{NN, HaltCondition};
 
-fn generate_training_data(world: &mut World, pilot: &Pilot1, renderer: &WorldRenderer){
-    let mut gen = rand::thread_rng();
-    for i in 0..100 {
-        let lastlen = pilot.training_data.borrow().len();
-        let mut counter = 0;
-        loop {
-            let reward = world.step();
-            renderer.move_robot(&world);
-            match world.at() {
-                Ok(result) => match result {
-                    Position::Flight => {
-                        counter += 1;
-                        if counter > 10 {
-                            break;
-                        }
-                    },
-                    Position::Finish => {
-                        break;
-                    },
-                },
-                Err(_) => {
-                    // for i in pilot
-                    break;
-                }
-            }
-            let mut robot = world.robot.borrow_mut();
-            robot.position *= 0.0;
-            robot.speed *= 0.0;
-
-            for (input, result) in pilot.training_data.borrow_mut().iter_mut().skip(lastlen) {
-                result[0] = gen.gen_range(0.0, 1.0);
-                result[1] = 0.0;
-            }
-        }
+fn discount_rewards(vec: &Vec<f32>) -> Vec<f32> {
+    if vec.len() == 0 {
+        return Vec::new();
     }
+    let mut result = Vec::new();
+    result.resize(vec.len(), 0.0);
+    let gamma = 0.99;
+    let mut current = 0.0;
+    for index in vec.len()-1..=0 {
+        current = current * gamma + vec[index];
+        result[index] = current;
+    }
+    result
 }
 
-fn main() {
-    let net = Rc::new(RefCell::new(NN::new(&[7, 4, 2])));
-    let rounds = vec![
-        Round::new(0.8, 0.7, 0.01)
-    ];
-    let mut pilot = Rc::new(Pilot1::new(net.clone()));
-    let p2 = Rc::new(DrunkPilot::new());
-    let mut world = World::new(rounds, p2.clone(), 0.001, 1.0);
-    let renderer = WorldRenderer::new();
-    renderer.init_with(&world);
-    generate_training_data(&mut world, &pilot, &renderer);
+fn train(world: &mut World, pilot: &Pilot1, net: Rc<RefCell<nn::NN>>, renderer: &WorldRenderer){
+    let mut reward = 0.0;
+    for i in 0..100 {
+        reward = generate_training_data(world, pilot, renderer);
+        world.reset();
+    }
     {
-        let examples = pilot.training_data.borrow();
-        net.borrow_mut().train(&examples[..])
-            .halt_condition( HaltCondition::Epochs(10000) )
-            .log_interval( Some(1000) )
+        let mut training_data = pilot.training_data.borrow_mut();
+        net.borrow_mut()
+            .train(&training_data[..])
+            .halt_condition( HaltCondition::Epochs(500) )
+            .log_interval( Some(100) )
             .momentum( 0.1 )
             .rate( 0.3 )
             .go();
+        training_data.clear();
+    }
+}
+
+fn generate_training_data(world: &mut World, pilot: &Pilot1, renderer: &WorldRenderer) -> f32 {
+    let mut rewards = vec![];
+    let mut total_reward = 0.0;
+    loop {
+        let reward = world.step();
+        total_reward += reward;
+        if world.done() {
+            print!("");
+            break;
+        }
+        rewards.push(reward);
+        renderer.move_robot(&world).unwrap();
+    }
+    let rewards = discount_rewards(&rewards);
+    for ((_input, result), reward) in pilot.training_data.borrow_mut().iter_mut().zip(rewards) {
+        // reward - 1 оставляем как есть, -1 изменяем как можно сильнее
+        let badness = (1.0 - reward as f64)/2.0;
+        result[0] = wiggle(result[0], badness);
+        result[1] = wiggle(result[1], badness);
+    }
+    total_reward
+}
+
+fn wiggle(value: f64, badness: f64) -> f64 {
+    let mut gen = rand::thread_rng();
+    let left = value - value * badness;
+    let right = value + (1.0 -value) * badness;
+    gen.gen_range(left, right)
+}
+
+
+fn main() {
+
+    let net = NN::new(&[7, 4, 2]);
+    let net = Rc::new(RefCell::new(net));
+    let pilot = Rc::new(Pilot1::new(net.clone()));
+
+    let rounds = vec![
+        Round::new(0.8, 0.7, 0.01)
+    ];
+    let mut world = World::new(rounds, pilot.clone(), 0.001, 1.0);
+
+    let renderer = WorldRenderer::new();
+    renderer.init_with(&world).unwrap();
+    loop {
+        train(&mut world, &pilot, net.clone(), &renderer);
     }
 }

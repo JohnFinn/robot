@@ -1,9 +1,11 @@
 extern crate num_traits;
 extern crate nalgebra;
 extern crate nn;
+extern crate rand;
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use rand::Rng;
 
 use crate::world::*;
 use crate::geometry_helper::*;
@@ -23,26 +25,6 @@ impl Pilot1 {
     }
 }
 
-fn reward(speed_to_center: f32, distance: f32) -> f32 {
-    speed_to_center / distance * 0.0001
-}
-
-// TODO may be possible to optimize 'cause we need only sign of dot product
-fn force_around(robot: &Robot, round: &Round) -> Vector2 {
-    let to_center = round.center - robot.position;
-    // if robot doesn't move towards the round
-    if robot.speed.dot(&to_center) <= 0.0 {
-        return Vector2::new(0.0, 0.0);
-    }
-    let mut to_way_around = to_center.clone();
-    to_way_around.rotate90left();
-
-    if robot.speed.dot(&to_way_around) < 0.0 {
-        to_way_around.rotate180();
-    }
-    to_way_around
-}
-
 impl Pilot for Pilot1 {
     fn throttle(&self, world: &World) -> Vector2 {
         let robot = world.robot.borrow();
@@ -53,12 +35,19 @@ impl Pilot for Pilot1 {
             robot.speed.x as f64, robot.speed.y as f64,
             r.center.x as f64, r.center.y as f64, r.radius as f64
         ];
-        let result = self.net.borrow_mut().run(&input);
+        let mut result = self.net.borrow().run(&input);
+        if result[0] > rand::thread_rng().gen_range(0.0, 1.0) {
+            result[0] = rand::thread_rng().gen_range(0.0, 1.0);
+        }
+        if result[1] > rand::thread_rng().gen_range(0.0, 1.0) {
+            result[1] = rand::thread_rng().gen_range(0.0, 1.0);
+        }
+
         let (direction, force) = (result[0] as f32, result[1] as f32);
         self.training_data.borrow_mut().push((input, result));
 
         let angle = 2.0 * std::f64::consts::PI as f32 * direction;
-        let component = ((0.001 * force).sqrt()/2.0).sqrt();
+        let component = ((0.000000001 * force).sqrt()/2.0).sqrt();
         let mut force = Vector2::new(component, component);
         force.rotate_left(angle);
         force
